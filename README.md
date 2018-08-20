@@ -1,1 +1,0 @@
-# schafik.github.io
