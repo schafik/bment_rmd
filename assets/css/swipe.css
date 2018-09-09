@@ -100,8 +100,8 @@
 }
 
 .orgs {
-	height:50vh;
 	background-color: #dddddd;
+	padding-bottom: 5vh;
 }
 
 .org-title {
@@ -111,6 +111,10 @@
 
 .org-logo img{
 	width: 70%;
+}
+
+#gsapp_logo{
+	width: 50%;
 }
 
 .rtimes {
