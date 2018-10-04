@@ -1,0 +1,33 @@
+#people-jumbo h1 {
+    font-size: 5rem;
+    /*font-weight: 300;*/
+    line-height: 1.2;
+    color: #ffffff;
+}
+
+#people-jumbo {
+	height: 33vh;
+	background-color: #222222;
+	background-size: 100px 100px;
+	padding-top: 0px;
+	margin-bottom: 0px;
+}
+
+#jumbo-text {
+	margin-top: 5vh;
+	margin-bottom: 10vh;
+}
+
+.bios {
+	padding-bottom: 5vh;
+}
+
+.bios img {
+	border-radius: 50%;
+	width: 70%;
+	padding: 3%;
+}
+
+.bios-row {
+	padding-top: 5vh;
+}
