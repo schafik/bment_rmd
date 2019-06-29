@@ -1,0 +1,26 @@
+---
+title: "Betterment Pilot"
+date: "Updated `r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: no
+    number_sections: no
+    theme: cosmo
+---
+
+###Betterment Data
+
+  * [User + Goal Data](http://schafik.github.io/bment/1_user_goal.html)
+
+###DOSPERT Data
+
+ * [Financial Scale Analysis](http://schafik.github.io/bment/2_dospert.html)
+ * [Split (Gambling vs. Investment) Financial Scale Analysis](http://schafik.github.io/bment/3_dospert_split.html)
+ 
+###Betterment Data + DOSPERT 
+
+  * [Predicting Allocation Deviation](http://schafik.github.io/bment/4_predicting.html)
+  * [Predicting Allocation](http://schafik.github.io/bment/5_beyond_OLS.html) 
+  
+  
+  

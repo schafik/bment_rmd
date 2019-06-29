@@ -1,0 +1,301 @@
+
+---
+title: 'Predicting Allocation'
+author: "Salah Chafik <salah@decisionsciences.columbia.edu>"
+date: "Updated `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: cosmo
+    toc: yes
+    self_contained: no
+---
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+source("/git_repositories/bment/scripts/helper_scripts/plotting_functions.R")
+source("/git_repositories/bment/scripts/helper_scripts/load_packages.R")
+#be sure to point the below to where you source the data
+full_data <- readRDS("/git_repositories/betterment/data/rds_data/userANDdospert_full.RDS") %>%
+              mutate(goal_type = factor(goal_type)) %>% #making sure goal type is a factor
+              rename(DOSPERT_riskTaking = finRT_sum, beta = fin_RP) #renaming for clarity
+full_data$goal_type <- relevel(full_data$goal_type, ref = "RETIREMENT") #setting retirement as baseline
+gamble <- readRDS("/git_repositories/betterment/data/rds_data/dospert_gamble.RDS")
+invest <- readRDS("/git_repositories/betterment/data/rds_data/dospert_invest.RDS")
+gamble <- left_join(full_data, gamble %>% select(finRT_sum_G:fin_RP_G, unique_id), 
+                    by=c("visitor_key" = "unique_id"))
+invest <- left_join(full_data, invest %>% select(finRT_sum_I:fin_RP_I, unique_id), 
+                    by=c("visitor_key" = "unique_id"))
+```
+
+#OLS regression
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+model1 <- lm(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, data = full_data)
+model2 <- lm(allocation_stock_actual ~ beta + allocation_stock_rec, data = full_data)
+model3 <- lm(allocation_stock_actual ~ dohmen + allocation_stock_rec, data = full_data)
+
+# model1 <- truncreg(allocation_stock_actual ~ DOSPERT_riskTaking, data = full_data, 
+#                    point = 1, direction = "right")
+# model2 <- truncreg(allocation_stock_actual ~ beta, data = full_data, 
+#                    point = 1, direction = "right")
+# model3 <- truncreg(allocation_stock_actual ~ dohmen, data = full_data, 
+#                    point = 1, direction = "right")
+
+htmlreg(l = list(model1, model2, model3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        bold = 0.1, caption = 'Allocation: OLS Regression',
+        caption.above = TRUE, digits = 4)
+```
+
++ **model 1**
+    + lm(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> for a one unit increase in DOSPERT hypothetical risk taking, there is a .58 percentage point increase in user stock allocation 
+
+
+  + **model 2**
+    + lm(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> for a one unit increase in DOSPERT Beta value (more risk seeking behavior), there is a 2 percentage point increase in user allocation
+
+  + **model 3**
+    + lm(allocation ~ **dohmen** + recommended allocation)
+
+> for a one unit increase in dohmen self reported risk, there is a 1.31 percentage point increase in user allocation
+
+
+#truncated regression
+
+> this technique is utilized when data for the outcome variable is only available for part of the sample (i.e. truncated sample). this is likely not the case for our study.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+library(truncreg) # http://www.ats.ucla.edu/stat/r/dae/truncreg.htm
+
+model1 <- truncreg(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, data = full_data, 
+                   point = 1, direction = "right")
+model2 <- truncreg(allocation_stock_actual ~ beta + allocation_stock_rec, data = full_data, 
+                   point = 1, direction = "right")
+model3 <- truncreg(allocation_stock_actual ~ dohmen + allocation_stock_rec, data = full_data, 
+                   point = 1, direction = "right")
+
+#not controlling for rec
+# model1 <- truncreg(allocation_stock_actual ~ DOSPERT_riskTaking, data = full_data, 
+#                    point = 1, direction = "right")
+# model2 <- truncreg(allocation_stock_actual ~ beta, data = full_data, 
+#                    point = 1, direction = "right")
+# model3 <- truncreg(allocation_stock_actual ~ dohmen, data = full_data, 
+#                    point = 1, direction = "right")
+
+#hack for displaying in a neat table
+full_data$sigma <- sample(c(0,1), 646, replace = TRUE)
+pseudo1 <- lm(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec + sigma, data = full_data)
+pseudo2 <- lm(allocation_stock_actual ~ beta + allocation_stock_rec + sigma, data = full_data)
+pseudo3 <- lm(allocation_stock_actual ~ dohmen + allocation_stock_rec + sigma, data = full_data)
+
+htmlreg(l = list(pseudo1, pseudo2, pseudo3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        override.coef = list(model1$coefficients, model2$coefficients, model3$coefficients),
+        override.se = list(sqrt(diag(model1$vcov)),sqrt(diag(model2$vcov)),sqrt(diag(model3$vcov))),
+        override.pval = list(summary(model1)$coefficients[,4],
+                             summary(model2)$coefficients[,4],
+                             summary(model3)$coefficients[,4]),
+        bold = 0.1, caption = 'Allocation: Truncated Regression',
+        caption.above = TRUE, digits = 4)
+```
+
+  + **sigma** = estimated standard deviation of the residuals
+
+  + **model 1**
+    + trunc(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> for a one unit increase in DOSPERT hypothetical risk taking, there is a 1.02 percentage point increase in user stock allocation 
+
+
+  + **model 2**
+    + trunc(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> for a one unit increase in DOSPERT Beta value (more risk seeking behavior), there is a 3.51 percentage point increase in user allocation
+
+  + **model 3**
+    + trunc(allocation ~ **dohmen** + recommended allocation)
+
+> for a one unit increase in dohmen self reported risk, there is a 1.31 percentage point increase in user allocation 
+
+\
+[back to table of contents](#TOC)
+
+#tobit/censored regression 
+
+> technique used when true value of outcome variable is not available because of some restriction (i.e. censored)
+  
+  + useful for us since some users could want 110% or -10% stock allocation  
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+library(censReg) #http://www.ats.ucla.edu/stat/r/dae/tobit.htm
+
+# model1 <- vglm(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, 
+#                tobit(Upper = 1), data = full_data)
+# 
+# model2 <- vglm(allocation_stock_actual ~ beta + allocation_stock_rec, 
+#                tobit(Upper = 1), data = full_data)
+# 
+# model3 <- vglm(allocation_stock_actual ~ dohmen + allocation_stock_rec, 
+#                tobit(Upper = 1), data = full_data)
+
+model1 <- censReg(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, 
+               right = 1, data = full_data)
+model2 <- censReg(allocation_stock_actual ~ beta + allocation_stock_rec, 
+               right = 1, data = full_data)
+model3 <- censReg(allocation_stock_actual ~ dohmen + allocation_stock_rec, 
+               right = 1, data = full_data)
+
+htmlreg(l = list(model1, model2, model3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        bold = 0.1, caption = 'Allocation: Tobit (Censored) Regression',
+        caption.above = TRUE, digits = 4)
+```
+
+  + **logSigma** = estimated standard deviation of the residuals in logarithmic terms 
+  
+  + **model 1**
+    + tobit(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> for a one unit increase in DOSPERT hypothetical risk taking, there is a .67 percentage point increase in user stock allocation 
+
+
+  + **model 2**
+    + tobit(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> for a one unit increase in DOSPERT Beta value (more risk seeking behavior), there is a 2 percentage point increase in user allocation
+
+  + **model 3**
+    + tobit(allocation ~ **dohmen** + recommended allocation)
+
+> for a one unit increase in dohmen self reported risk, there is a 1.49 percentage point increase in user allocation 
+
+\
+[back to table of contents](#TOC)
+
+#arcsin transformation
+
+```{r, results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+# arc-sin transform on the proportions, which usually make them normal
+  # trans.arcsine <- function(x){asin(sign(x) * sqrt(abs(x)))}
+  # trans.arcsine(full_data$allocation_stock_actual)
+arc_sin <- full_data %>% mutate(allocation_stock_actual = 
+                                asin(allocation_stock_actual)*2/pi)
+
+model1 <- lm(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, data = arc_sin)
+model2 <- lm(allocation_stock_actual ~ beta + allocation_stock_rec, data = arc_sin)
+model3 <- lm(allocation_stock_actual ~ dohmen + allocation_stock_rec, data = arc_sin)
+
+htmlreg(l = list(model1, model2, model3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        bold = 0.1, caption = 'Allocation: Arcsin Transformation',
+        caption.above = TRUE, digits = 4)
+```
+
+ + **model 1**
+    + lm(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> for a one unit increase in DOSPERT hypothetical risk taking, there is a .73 percentage point increase in user stock allocation 
+
+
+  + **model 2**
+    + lm(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> for a one unit increase in DOSPERT Beta value (more risk seeking behavior), there is a 1.91 percentage point increase in user allocation
+
+  + **model 3**
+    + lm(allocation ~ **dohmen** + recommended allocation)
+
+> for a one unit increase in dohmen self reported risk, there is a 1.64 percentage point increase in user allocation 
+
+\
+[back to table of contents](#TOC)
+
+#fractional logit model 
+```{r, results='asis', echo=FALSE}
+# http://stackoverflow.com/questions/19893133/fractional-logit-model-in-r
+# http://www.ats.ucla.edu/stat/stata/faq/proportion.htm
+# Fractional Logit Models allow for inclusion of 0/1 outcomes, have correct SE's near the bounds. 
+
+model1 <- glm(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, 
+                  family=quasibinomial(link=logit), data=full_data)
+model2 <- glm(allocation_stock_actual ~ beta + allocation_stock_rec, 
+                  family=quasibinomial(link=logit), data=full_data)
+model3 <- glm(allocation_stock_actual ~ dohmen + allocation_stock_rec, 
+                  family=quasibinomial(link=logit), data=full_data)
+
+htmlreg(l = list(model1, model2, model3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        bold = 0.1, caption = 'Allocation: Fractional Logit',
+        override.coef = list(exp(model1$coefficients), exp(model2$coefficients), exp(model3$coefficients)),
+        caption.above = TRUE, digits = 4)
+```
+
+ + **model 1**
+    + lm(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> the odds of investing in stocks increases by 3.2% for a one unit increase in DOSPERT hypothetical risk taking. 
+
+
+  + **model 2**
+    + lm(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> the odds of investing in stocks increases by 11.6% for a one unit increase in DOSPERT Beta value (more risk seeking behavior).
+
+  + **model 3**
+    + lm(allocation ~ **dohmen** + recommended allocation)
+
+> the odds of investing in stocks increases by 7.1% for a one unit increase in dohmen self reported risk
+
+\
+[back to table of contents](#TOC)
+
+#beta regression
+> used for data that is bounded between 0 and 1. [see paper here](http://www.jstatsoft.org/v34/i02/paper).  
+
+```{r, results='asis', echo=FALSE}
+library(betareg) #https://stats.stackexchange.com/questions/31300/dealing-with-0-1-values-in-a-beta-regression
+
+beta_reg <- full_data %>% 
+              mutate(allocation_stock_actual = 
+                     (allocation_stock_actual*645 + .5)/646) #transforming for sake of beta regression
+
+
+model1 <- betareg(allocation_stock_actual ~ DOSPERT_riskTaking + allocation_stock_rec, data = beta_reg)
+model2 <- betareg(allocation_stock_actual ~ beta + allocation_stock_rec, data = beta_reg)
+model3 <- betareg(allocation_stock_actual ~ dohmen + allocation_stock_rec, data = beta_reg)
+
+htmlreg(l = list(model1, model2, model3), center = TRUE, stars = c(0.001, 0.01, 0.05, 0.1),
+        override.coef = list(c(exp(model1$coefficients$mean), model1$coefficients$precision),
+                             c(exp(model2$coefficients$mean), model2$coefficients$precision),
+                             c(exp(model3$coefficients$mean), model3$coefficients$precision)),
+        bold = 0.1, caption = 'Allocation: Beta Regression',
+        caption.above = TRUE, digits = 4)
+```
+
++ **model 1**
+    + lm(allocation ~ **DOSPERT risk taking** + recommended allocation)
+
+> the odds of investing in stocks increases by 4.75% for a one unit increase in DOSPERT hypothetical risk taking. 
+
+
+  + **model 2**
+    + lm(allocation ~ **DOSPERT beta** + recommended allocation)
+
+> the odds of investing in stocks increases by 11.18% for a one unit increase in DOSPERT Beta value (more risk seeking behavior).
+
+  + **model 3**
+    + lm(allocation ~ **dohmen** + recommended allocation)
+
+> the odds of investing in stocks increases by 11.04% for a one unit increase in dohmen self reported risk
+
+
+\
+[back to table of contents](#TOC)
+
+<br>
+
+<br>
+
+<br>
+
+***
+***
+***
+
